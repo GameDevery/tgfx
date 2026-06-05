@@ -19,3 +19,5 @@ alwaysApply: true
 - 避免使用 mutable 成员变量。如需在 const 方法中修改状态，优先考虑将该方法改为非 const，而非将成员声明为 mutable
 - `include/` 目录 API 需详细注释含参数描述，其他公开方法一段话描述主要功能，私有方法不加注释
 - 函数内代码不加行注释。对非显而易见的算法选择、特殊边界处理、或绕过已知问题的 workaround 需加注释说明原因
+- 内部工具类用 `XxxUtils` 后缀 + class 包裹静态方法（如 `RRectUtils`、`MatrixUtils`），不用 `Priv` 后缀或命名空间级自由函数
+- union type 切换通过 `setType(Type)` 方法管理，不裸赋值 `_type = ...`，确保旧 union 成员被正确析构

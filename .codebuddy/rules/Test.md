@@ -36,6 +36,8 @@ cmake --build cmake-build-debug --target TGFXFullTest
 
 截图内容必须居中显示，四边边距约 50 像素（误差 1 像素内可接受）。所有字号、坐标、矩阵等数值尽可能使用整数，避免小数点，以确保清晰度。
 
+多场景截图合并为单张网格图（一个 `Baseline::Compare` 调用），每个 cell 用 `canvas->translate` 定位 + pixel-aligned rect clip 隔离。Cell 内部用 `// Cell N: ...` 注释标注场景。
+
 **获取精确边界的方法**（必须通过打印获取，不可凭感觉估算）：
 - 图层：`layer->getBounds(nullptr, true)`
 - Shape：`shape->getPath().getBounds()`（Shape 必须通过 Path 获取边界）
@@ -44,3 +46,9 @@ cmake --build cmake-build-debug --target TGFXFullTest
 - 其他情况：先输出截图，用工具读取图片计算实际像素边界
 
 根据获取的边界调整位置和 Surface 尺寸，使内容居中。验证正确后移除临时打印语句。
+
+### 测试用例结构
+
+- 大型测试拆分为多个独立 `TGFX_TEST` 函数（按场景分组），每个函数内 case 用 `{ canvas->save(); ...; canvas->restore(); }` 隔离，避免重复 `Surface::Make`
+- 逻辑分支用 `// Case N: ...` 注释标注，子分支用 `// Case Na/Nb: ...`，每个 Case 前加空行（第一个紧跟 `{` 除外）
+- `TGFX_PRIVATE_ACCESS` 统一用 block 形式：`TGFX_PRIVATE_ACCESS({ ... });`，内部每条语句独占一行

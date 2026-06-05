@@ -19,6 +19,7 @@
 #pragma once
 
 #include <array>
+#include <optional>
 #include "tgfx/core/Matrix.h"
 #include "tgfx/core/Rect.h"
 
@@ -28,6 +29,15 @@ namespace tgfx {
  */
 class RRect {
  public:
+  /**
+   * Returns an RRect representing a plain rectangle with zero corner radii.
+   */
+  static RRect MakeRect(const Rect& rect) {
+    RRect rr = {};
+    rr.setRect(rect);
+    return rr;
+  }
+
   /**
    * Returns an RRect with the same radii for all four corners. See setRectXY() for details.
    */
@@ -95,6 +105,12 @@ class RRect {
   }
 
   /**
+   * Sets to a plain rectangle with zero corner radii.
+   * @param rect  bounds of the rectangle
+   */
+  void setRect(const Rect& rect);
+
+  /**
    * Sets to rounded rectangle with the same radii for all four corners.
    * @param rect  bounds of rounded rectangle
    * @param radiusX  x-axis radius of corners
@@ -131,6 +147,16 @@ class RRect {
    * @param dy  vertical offset
    */
   void offset(float dx, float dy);
+
+  /**
+   * Returns a transformed RRect when the matrix preserves axis alignment (identity, translate,
+   * non-zero scale, mirror, and rotations by multiples of 90 degrees), with corner radii reordered
+   * accordingly. Returns std::nullopt when the matrix has perspective, contains skew or arbitrary
+   * rotation, the resulting bounds are non-finite or empty, or the resulting per-corner radii fail
+   * the validity check.
+   * @param matrix  transform matrix to apply
+   */
+  std::optional<RRect> makeTransform(const Matrix& matrix) const;
 
   /**
    * Returns the bounding rectangle.

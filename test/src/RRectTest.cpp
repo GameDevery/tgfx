@@ -107,4 +107,147 @@ TGFX_TEST(RRectTest, Scale) {
   EXPECT_FLOAT_EQ(rRect.radii()[2].y, 2.5f);
 }
 
+TGFX_TEST(RRectTest, MakeTransformIdentity) {
+  auto rRect =
+      RRect::MakeRectRadii(Rect::MakeWH(100, 80), {{{20, 10}, {10, 10}, {5, 5}, {15, 15}}});
+  auto out = rRect.makeTransform(Matrix::I());
+  ASSERT_TRUE(out.has_value());
+  EXPECT_EQ(out->rect(), rRect.rect());
+  EXPECT_EQ(out->radii(), rRect.radii());
+  EXPECT_EQ(out->type(), rRect.type());
+}
+
+TGFX_TEST(RRectTest, MakeTransformTranslate) {
+  auto rRect = RRect::MakeRectXY(Rect::MakeXYWH(10, 20, 100, 80), 8, 12);
+  auto out = rRect.makeTransform(Matrix::MakeTrans(5, -3));
+  ASSERT_TRUE(out.has_value());
+  EXPECT_EQ(out->rect(), Rect::MakeXYWH(15, 17, 100, 80));
+  EXPECT_EQ(out->radii()[0], (Point{8, 12}));
+  EXPECT_EQ(out->type(), RRect::Type::Simple);
+}
+
+TGFX_TEST(RRectTest, MakeTransformScale) {
+  auto rRect =
+      RRect::MakeRectRadii(Rect::MakeWH(100, 80), {{{20, 10}, {10, 10}, {5, 5}, {15, 15}}});
+  auto out = rRect.makeTransform(Matrix::MakeScale(2, 0.5f));
+  ASSERT_TRUE(out.has_value());
+  EXPECT_FLOAT_EQ(out->rect().width(), 200.f);
+  EXPECT_FLOAT_EQ(out->rect().height(), 40.f);
+  // Top-left corner radii scale with the matrix, no swap on positive scale.
+  EXPECT_FLOAT_EQ(out->radii()[0].x, 40.f);
+  EXPECT_FLOAT_EQ(out->radii()[0].y, 5.f);
+}
+
+TGFX_TEST(RRectTest, MakeTransformMirrorX) {
+  // flipX swaps left/right corner pairs.
+  auto rRect =
+      RRect::MakeRectRadii(Rect::MakeWH(100, 80), {{{20, 10}, {30, 15}, {5, 5}, {15, 15}}});
+  auto out = rRect.makeTransform(Matrix::MakeScale(-1, 1));
+  ASSERT_TRUE(out.has_value());
+  EXPECT_EQ(out->rect(), Rect::MakeXYWH(-100, 0, 100, 80));
+  // After flipX: TL <-> TR, BR <-> BL.
+  EXPECT_EQ(out->radii()[0], (Point{30, 15}));  // was TR
+  EXPECT_EQ(out->radii()[1], (Point{20, 10}));  // was TL
+  EXPECT_EQ(out->radii()[2], (Point{15, 15}));  // was BL
+  EXPECT_EQ(out->radii()[3], (Point{5, 5}));    // was BR
+}
+
+TGFX_TEST(RRectTest, MakeTransformMirrorY) {
+  auto rRect =
+      RRect::MakeRectRadii(Rect::MakeWH(100, 80), {{{20, 10}, {30, 15}, {5, 5}, {15, 15}}});
+  auto out = rRect.makeTransform(Matrix::MakeScale(1, -1));
+  ASSERT_TRUE(out.has_value());
+  // After flipY: TL <-> BL, TR <-> BR.
+  EXPECT_EQ(out->radii()[0], (Point{15, 15}));  // was BL
+  EXPECT_EQ(out->radii()[1], (Point{5, 5}));    // was BR
+  EXPECT_EQ(out->radii()[2], (Point{30, 15}));  // was TR
+  EXPECT_EQ(out->radii()[3], (Point{20, 10}));  // was TL
+}
+
+TGFX_TEST(RRectTest, MakeTransformRotate90) {
+  // 90 degrees clockwise: width <-> height, corner shift, x/y swap.
+  auto rRect =
+      RRect::MakeRectRadii(Rect::MakeWH(100, 80), {{{20, 10}, {30, 15}, {5, 5}, {15, 15}}});
+  Matrix m = {};
+  m.setRotate(90);
+  auto out = rRect.makeTransform(m);
+  ASSERT_TRUE(out.has_value());
+  EXPECT_FLOAT_EQ(out->rect().width(), 80.f);
+  EXPECT_FLOAT_EQ(out->rect().height(), 100.f);
+  // Top-left of new rect comes from bottom-left of old rect (clockwise rotation),
+  // with x/y swapped.
+  EXPECT_FLOAT_EQ(out->radii()[0].x, 15.f);  // old BL.y
+  EXPECT_FLOAT_EQ(out->radii()[0].y, 15.f);  // old BL.x
+}
+
+TGFX_TEST(RRectTest, MakeTransformRotate270) {
+  // 270 degrees clockwise (= 90 ccw).
+  auto rRect =
+      RRect::MakeRectRadii(Rect::MakeWH(100, 80), {{{20, 10}, {30, 15}, {5, 5}, {15, 15}}});
+  Matrix m = {};
+  m.setRotate(270);
+  auto out = rRect.makeTransform(m);
+  ASSERT_TRUE(out.has_value());
+  EXPECT_FLOAT_EQ(out->rect().width(), 80.f);
+  EXPECT_FLOAT_EQ(out->rect().height(), 100.f);
+  // Top-left of new rect comes from top-right of old rect (counter-clockwise rotation),
+  // with x/y swapped.
+  EXPECT_FLOAT_EQ(out->radii()[0].x, 15.f);  // old TR.y
+  EXPECT_FLOAT_EQ(out->radii()[0].y, 30.f);  // old TR.x
+}
+
+TGFX_TEST(RRectTest, MakeTransformComposite) {
+  // scale * rotate90 should produce a valid axis-aligned RRect.
+  auto rRect = RRect::MakeRectXY(Rect::MakeWH(100, 80), 8, 12);
+  Matrix m = Matrix::MakeScale(2, 3);
+  Matrix r = {};
+  r.setRotate(90);
+  m.preConcat(r);
+  auto out = rRect.makeTransform(m);
+  ASSERT_TRUE(out.has_value());
+  EXPECT_FLOAT_EQ(out->rect().width(), 80.f * 2.f);
+  EXPECT_FLOAT_EQ(out->rect().height(), 100.f * 3.f);
+}
+
+TGFX_TEST(RRectTest, MakeTransformShearFails) {
+  auto rRect = RRect::MakeRectXY(Rect::MakeWH(100, 80), 8, 12);
+  Matrix m = Matrix::I();
+  m.setSkew(0.5f, 0);
+  EXPECT_FALSE(rRect.makeTransform(m).has_value());
+}
+
+TGFX_TEST(RRectTest, MakeTransformPerspectiveFails) {
+  auto rRect = RRect::MakeRectXY(Rect::MakeWH(100, 80), 8, 12);
+  Matrix m = Matrix::I();
+  m.setAll(1, 0, 0, 0, 1, 0, 0.001f, 0, 1);
+  EXPECT_FALSE(rRect.makeTransform(m).has_value());
+}
+
+TGFX_TEST(RRectTest, MakeTransformExtremeScaleEmptyFails) {
+  auto rRect = RRect::MakeRectXY(Rect::MakeWH(100, 80), 8, 12);
+  // Zero scale collapses the rect.
+  auto out = rRect.makeTransform(Matrix::MakeScale(0, 1));
+  EXPECT_FALSE(out.has_value());
+}
+
+TGFX_TEST(RRectTest, MakeTransformOval) {
+  auto rRect = RRect::MakeOval(Rect::MakeWH(100, 80));
+  EXPECT_EQ(rRect.type(), RRect::Type::Oval);
+  auto out = rRect.makeTransform(Matrix::MakeScale(2, 1));
+  ASSERT_TRUE(out.has_value());
+  EXPECT_EQ(out->type(), RRect::Type::Oval);
+  EXPECT_FLOAT_EQ(out->radii()[0].x, 100.f);
+  EXPECT_FLOAT_EQ(out->radii()[0].y, 40.f);
+}
+
+TGFX_TEST(RRectTest, MakeTransformRect) {
+  auto rRect = RRect::MakeRectXY(Rect::MakeWH(100, 80), 0, 0);
+  EXPECT_EQ(rRect.type(), RRect::Type::Rect);
+  auto out = rRect.makeTransform(Matrix::MakeScale(2, 0.5f));
+  ASSERT_TRUE(out.has_value());
+  EXPECT_EQ(out->type(), RRect::Type::Rect);
+  EXPECT_FLOAT_EQ(out->rect().width(), 200.f);
+  EXPECT_FLOAT_EQ(out->rect().height(), 40.f);
+}
+
 }  // namespace tgfx

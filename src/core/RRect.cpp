@@ -17,6 +17,7 @@
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
 #include "tgfx/core/RRect.h"
+#include <cmath>
 
 namespace tgfx {
 
@@ -107,6 +108,12 @@ static inline RRect::Type ComputeType(const Rect& rect, const std::array<Point, 
   return RRect::Type::Complex;
 }
 
+void RRect::setRect(const Rect& rect) {
+  _rect = rect.makeSorted();
+  _radii = {};
+  _type = Type::Rect;
+}
+
 void RRect::setRectXY(const Rect& rect, float radiusX, float radiusY) {
   const auto radius = Point{radiusX, radiusY};
   setRectRadii(rect, {radius, radius, radius, radius});
@@ -143,5 +150,95 @@ void RRect::scale(float scaleX, float scaleY) {
 
 void RRect::offset(float dx, float dy) {
   _rect.offset(dx, dy);
+}
+
+// Corner index convention used by SkRRect (matches tgfx layout):
+//   0 = top-left, 1 = top-right, 2 = bottom-right, 3 = bottom-left
+std::optional<RRect> RRect::makeTransform(const Matrix& matrix) const {
+  if (matrix.isIdentity()) {
+    return *this;
+  }
+  if (!matrix.rectStaysRect()) {
+    return std::nullopt;
+  }
+
+  Rect newRect = matrix.mapRect(_rect);
+  // mapRect produces a sorted rect under axis-aligned matrices, so an empty rect indicates
+  // a collapsed dimension (loss of precision). Non-finite results indicate overflow.
+  if (!std::isfinite(newRect.left) || !std::isfinite(newRect.top) ||
+      !std::isfinite(newRect.right) || !std::isfinite(newRect.bottom) || newRect.isEmpty()) {
+    return std::nullopt;
+  }
+
+  RRect dst = {};
+  dst._rect = newRect;
+  dst._type = _type;
+
+  if (_type == Type::Rect) {
+    return dst;
+  }
+  if (_type == Type::Oval) {
+    const auto rx = newRect.width() * 0.5f;
+    const auto ry = newRect.height() * 0.5f;
+    for (auto& r : dst._radii) {
+      r = {rx, ry};
+    }
+    return dst;
+  }
+
+  float xScale = matrix.getScaleX();
+  float yScale = matrix.getScaleY();
+
+  // 90 / 270 degree rotation: scale entries are zero and skew entries carry the rotation.
+  // 180 degrees rotations are simply flipX with a flipY and would come under a scale transform.
+  if (!matrix.isScaleTranslate()) {
+    const bool isClockwise = matrix.getSkewX() < 0;
+    yScale = matrix.getSkewY() * (isClockwise ? 1.0f : -1.0f);
+    xScale = matrix.getSkewX() * (isClockwise ? -1.0f : 1.0f);
+
+    const int dir = isClockwise ? 3 : 1;
+    for (size_t i = 0; i < 4; ++i) {
+      const auto src = static_cast<size_t>(static_cast<int>(i) + dir) % 4;
+      // Swap X and Y axis for the radii.
+      dst._radii[i].x = _radii[src].y;
+      dst._radii[i].y = _radii[src].x;
+    }
+  } else {
+    dst._radii = _radii;
+  }
+
+  const bool flipX = xScale < 0;
+  if (flipX) {
+    xScale = -xScale;
+  }
+  const bool flipY = yScale < 0;
+  if (flipY) {
+    yScale = -yScale;
+  }
+
+  for (auto& r : dst._radii) {
+    r.x *= xScale;
+    r.y *= yScale;
+  }
+
+  if (flipX) {
+    if (flipY) {
+      // Swap with opposite corners.
+      std::swap(dst._radii[0], dst._radii[2]);
+      std::swap(dst._radii[1], dst._radii[3]);
+    } else {
+      // Only swap in x.
+      std::swap(dst._radii[0], dst._radii[1]);
+      std::swap(dst._radii[2], dst._radii[3]);
+    }
+  } else if (flipY) {
+    // Only swap in y.
+    std::swap(dst._radii[0], dst._radii[3]);
+    std::swap(dst._radii[1], dst._radii[2]);
+  }
+
+  ScaleRadii(dst._rect, dst._radii);
+  dst._type = ComputeType(dst._rect, dst._radii);
+  return dst;
 }
 }  // namespace tgfx
