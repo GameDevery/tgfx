@@ -49,16 +49,12 @@ class FillPainter : public Painter {
   std::shared_ptr<Shape> prepareShape(std::shared_ptr<Shape> innerShape, size_t /*index*/,
                                       LayerPaint* paint) override {
     const auto bounds = innerShape->getPath().getBounds();
-    // Skip sub-pixel paths. The geometry layer clamps zero-sized shapes to a sub-pixel
-    // extent so the stroker can still produce cap/join geometry; fill should honor the
-    // user's zero-size intent and not draw. Threshold is twice the geometry MIN_EXTENT.
     if (bounds.width() < FILL_MIN_EXTENT || bounds.height() < FILL_MIN_EXTENT) {
       return nullptr;
     }
     if (innerShape->fillType() == PathFillType::Winding) {
       innerShape = Shape::ApplyFillType(innerShape, fillRule);
     }
-    // Use the resolved path bounds so the fit region matches the actual fill footprint rather than the conservative cover.
     paint->shader = wrapShaderWithFit(bounds);
     return innerShape;
   }
@@ -69,7 +65,6 @@ class FillPainter : public Painter {
       return emit;
     }
     emit.textBlob = run.textBlob;
-    // Tight bounds keep the fit region in step with the visible glyph extents instead of the conservative blob cover.
     auto baseShader = wrapShaderWithFit(run.textBlob->getTightBounds());
     float blendFactor = run.style.fillColor.alpha;
     float runAlpha = alpha * run.style.alpha;
@@ -89,6 +84,10 @@ class FillPainter : public Painter {
       emit.paints.push_back(std::move(paint));
     }
     return emit;
+  }
+
+  void onGetStyledShape(StyledShape& result) const override {
+    result.style = PaintStyle::Fill;
   }
 };
 

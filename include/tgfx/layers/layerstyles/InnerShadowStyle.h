@@ -97,18 +97,42 @@ class InnerShadowStyle : public LayerStyle {
    */
   void setColor(const Color& color);
 
+  /**
+   * The geometric inset (or outset when negative) applied to the shadow source before blur.
+   *
+   * When zero (the default), the inner shadow is rendered directly from the layer's rasterized
+   * content image without any geometric expansion.
+   *
+   * When non-zero, the inner shadow footprint is derived from the layer's vector shape and
+   * expanded or contracted analytically. If the shape cannot be identified as a Rect, Oval, or
+   * RRect, or the layer has children or multiple geometry elements, the layer's bounding rect is
+   * used as the spread source instead.
+   */
+  float spread() const {
+    return _spread;
+  }
+
+  /**
+   * Sets the geometric inset / outset distance.
+   */
+  void setSpread(float spread);
+
   LayerStylePosition position() const override {
     return LayerStylePosition::Above;
   }
 
   Rect filterBounds(const Rect& srcRect, float contentScale) override;
 
+  bool needContentShape() const override {
+    return true;
+  }
+
  private:
   InnerShadowStyle(float offsetX, float offsetY, float blurrinessX, float blurrinessY,
                    const Color& color);
 
-  void onDraw(Canvas* canvas, std::shared_ptr<Image> content, float contentScale,
-              const Point& contentOffset, float alpha, BlendMode blendMode) override;
+  void onDraw(Canvas* canvas, const LayerStyleDrawSource& source, float alpha,
+              BlendMode blendMode) override;
 
   std::shared_ptr<ImageFilter> getShadowFilter(float scale);
 
@@ -121,5 +145,6 @@ class InnerShadowStyle : public LayerStyle {
   Color _color = Color::Black();
   std::shared_ptr<ImageFilter> shadowFilter = nullptr;
   float currentScale = 0.0f;
+  float _spread = 0.0f;
 };
 }  // namespace tgfx

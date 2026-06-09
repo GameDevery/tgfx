@@ -18,7 +18,9 @@
 
 #include "tgfx/layers/VectorLayer.h"
 #include "core/utils/Log.h"
+#include "layers/contents/LayerGeometryUtils.h"
 #include "tgfx/layers/LayerRecorder.h"
+#include "vectors/Painter.h"
 #include "vectors/VectorContext.h"
 
 namespace tgfx {
@@ -61,10 +63,29 @@ void VectorLayer::onUpdateContent(LayerRecorder* recorder) {
       element->apply(&context);
     }
   }
-  // Render all painters
   for (const auto& painter : context.painters) {
     painter->draw(recorder);
   }
+}
+
+std::optional<StyledShape> VectorLayer::onGetContentShape() {
+  if (_contents.empty()) {
+    return Layer::onGetContentShape();
+  }
+  VectorContext context = {};
+  for (const auto& element : _contents) {
+    DEBUG_ASSERT(element != nullptr);
+    if (element->enabled()) {
+      element->apply(&context);
+    }
+  }
+  if (context.painters.size() == 1) {
+    auto styled = context.painters[0]->getStyledShape();
+    if (styled.shape != nullptr) {
+      return styled;
+    }
+  }
+  return Layer::onGetContentShape();
 }
 
 }  // namespace tgfx

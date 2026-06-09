@@ -18,6 +18,7 @@
 
 #include "tgfx/layers/ShapeLayer.h"
 #include "layers/DashEffect.h"
+#include "layers/contents/LayerGeometryUtils.h"
 #include "tgfx/core/Matrix.h"
 #include "tgfx/core/Paint.h"
 #include "tgfx/layers/LayerPaint.h"
@@ -261,5 +262,41 @@ std::shared_ptr<Shape> ShapeLayer::createStrokeShape() const {
     strokeShape = Shape::Merge(std::move(strokeShape), _shape, PathOp::Difference);
   }
   return strokeShape;
+}
+
+std::optional<StyledShape> ShapeLayer::onGetContentShape() {
+  if (_shape == nullptr) {
+    StyledShape geometry = {};
+    geometry.style = PaintStyle::Fill;
+    return geometry;
+  }
+  auto path = _shape->getPath();
+  auto fillCount = _fillStyles.size();
+  auto strokeCount = _strokeStyles.size();
+  if (strokeCount == 0 && fillCount == 0) {
+    return MakeBoundsStyledShape(path);
+  }
+  if (strokeCount == 0 && fillCount == 1) {
+    StyledShape geometry = {};
+    geometry.shape = Shape::MakeFrom(path);
+    geometry.style = PaintStyle::Fill;
+    return geometry;
+  }
+  auto strokeAlign = static_cast<StrokeAlign>(shapeBitFields.strokeAlign);
+  if (strokeAlign != StrokeAlign::Center || !_lineDashPattern.empty()) {
+    return MakeBoundsStyledShape(path);
+  }
+  if (strokeCount == 1 && fillCount == 0) {
+    StyledShape geometry = {};
+    geometry.shape = Shape::MakeFrom(path);
+    geometry.style = PaintStyle::Stroke;
+    geometry.strokeWidth = stroke.width;
+    geometry.strokeAlign = StrokeAlign::Center;
+    return geometry;
+  }
+  if (strokeCount == 1 && fillCount == 1) {
+    return MakeOutsetMergedStyledShape(path, stroke.width);
+  }
+  return MakeBoundsStyledShape(path);
 }
 }  // namespace tgfx

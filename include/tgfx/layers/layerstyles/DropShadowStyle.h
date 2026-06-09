@@ -110,6 +110,26 @@ class DropShadowStyle : public LayerStyle {
    */
   void setShowBehindLayer(bool showBehindLayer);
 
+  /**
+   * The geometric outset (or inset when negative) applied to the shadow source before blur.
+   *
+   * When zero (the default), the shadow is rendered directly from the layer's rasterized content
+   * image without any geometric expansion.
+   *
+   * When non-zero, the shadow footprint is derived from the layer's vector shape and expanded or
+   * contracted analytically. If the shape cannot be identified as a Rect, Oval, or RRect, or the
+   * layer has children or multiple geometry elements, the layer's bounding rect is used as the
+   * spread source instead.
+   */
+  float spread() const {
+    return _spread;
+  }
+
+  /**
+   * Sets the geometric outset / inset distance.
+   */
+  void setSpread(float spread);
+
   LayerStylePosition position() const override {
     return LayerStylePosition::Below;
   }
@@ -120,14 +140,13 @@ class DropShadowStyle : public LayerStyle {
     return !_showBehindLayer ? LayerStyleExtraSourceType::Contour : LayerStyleExtraSourceType::None;
   }
 
- protected:
-  void onDraw(Canvas* canvas, std::shared_ptr<Image> content, float contentScale,
-              const Point& contentOffset, float alpha, BlendMode blendMode) override;
+  bool needContentShape() const override {
+    return true;
+  }
 
-  void onDrawWithExtraSource(Canvas* canvas, std::shared_ptr<Image> content, float contentScale,
-                             const Point& contentOffset, std::shared_ptr<Image> extraSource,
-                             const Point& extraSourceOffset, float alpha,
-                             BlendMode blendMode) override;
+ protected:
+  void onDraw(Canvas* canvas, const LayerStyleDrawSource& source, float alpha,
+              BlendMode blendMode) override;
 
  private:
   DropShadowStyle(float offsetX, float offsetY, float blurrinessX, float blurrinessY,
@@ -143,6 +162,7 @@ class DropShadowStyle : public LayerStyle {
   float _blurrinessY = 0.0f;
   Color _color = Color::Black();
   bool _showBehindLayer = true;
+  float _spread = 0.0f;
 
   float currentScale = 1.0f;
   std::shared_ptr<ImageFilter> shadowFilter = nullptr;

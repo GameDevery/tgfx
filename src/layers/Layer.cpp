@@ -1090,6 +1090,26 @@ LayerContent* Layer::getContent() {
   return layerContent.get();
 }
 
+std::optional<StyledShape> Layer::onGetContentShape() {
+  auto* content = getContent();
+  if (content == nullptr) {
+    return std::nullopt;
+  }
+  // Use tight bounds instead of getBounds() because getBounds() can be significantly larger than
+  // the actual content area (e.g. TextContent uses font metrics rather than glyph outlines).
+  auto bounds = content->getTightBounds(Matrix::I());
+  if (bounds.isEmpty()) {
+    return std::nullopt;
+  }
+
+  StyledShape shape = {};
+  Path path = {};
+  path.addRect(bounds);
+  shape.shape = Shape::MakeFrom(path);
+  shape.style = PaintStyle::Fill;
+  return shape;
+}
+
 std::shared_ptr<Image> Layer::applyFilters(std::shared_ptr<Image> image, float contentScale,
                                            const Rect& contentBounds, Point* offset) {
   if (!image || _filters.empty()) {
@@ -1760,12 +1780,14 @@ std::unique_ptr<LayerStyleSource> Layer::getLayerStyleSource(const DrawArgs& arg
   // Collect which excludeChildEffects values need content and/or contour.
   bool needContent[2] = {false, false};
   bool needContour[2] = {false, false};
+  bool needContentShape = false;
   for (const auto& layerStyle : _layerStyles) {
     auto index = static_cast<int>(layerStyle->excludeChildEffects());
     needContent[index] = true;
     if (layerStyle->extraSourceType() == LayerStyleExtraSourceType::Contour) {
       needContour[index] = true;
     }
+    needContentShape |= layerStyle->needContentShape();
   }
 
   auto source = std::make_unique<LayerStyleSource>();
@@ -1812,6 +1834,10 @@ std::unique_ptr<LayerStyleSource> Layer::getLayerStyleSource(const DrawArgs& arg
     }
 
     source->groups[i] = std::move(group);
+  }
+
+  if (needContentShape) {
+    source->contentShape = onGetContentShape();
   }
 
   return source;
@@ -1911,24 +1937,20 @@ void Layer::drawLayerStyleDefault(const DrawArgs& /*args*/, Canvas* canvas, floa
   auto matrix = Matrix::MakeScale(1.f / source->contentScale, 1.f / source->contentScale);
   matrix.preTranslate(contentEntry.offset.x, contentEntry.offset.y);
   canvas->concat(matrix);
-  switch (layerStyle->extraSourceType()) {
-    case LayerStyleExtraSourceType::None:
-      layerStyle->draw(canvas, contentEntry.image, source->contentScale, contentEntry.offset,
-                       alpha);
-      break;
-    case LayerStyleExtraSourceType::Background:
-      // Unreachable: Background-sourced styles are routed through BackgroundHandler.
-      DEBUG_ASSERT(false);
-      break;
-    case LayerStyleExtraSourceType::Contour:
-      if (group->contour.has_value()) {
-        auto contourOffset = group->contour->offset - contentEntry.offset;
-        layerStyle->drawWithExtraSource(canvas, contentEntry.image, source->contentScale,
-                                        contentEntry.offset, group->contour->image, contourOffset,
-                                        alpha);
-      }
-      break;
+
+  LayerStyleDrawSource drawSource = {};
+  drawSource.content = contentEntry.image;
+  drawSource.contentOffset = contentEntry.offset;
+  drawSource.contentScale = source->contentScale;
+  if (layerStyle->extraSourceType() == LayerStyleExtraSourceType::Contour &&
+      group->contour.has_value()) {
+    drawSource.extra = group->contour->image;
+    drawSource.extraOffset = group->contour->offset - contentEntry.offset;
   }
+  if (source->contentShape.has_value() && layerStyle->needContentShape()) {
+    drawSource.contentShape = source->contentShape;
+  }
+  layerStyle->draw(canvas, drawSource, alpha, layerStyle->blendMode());
 }
 
 bool Layer::getLayersUnderPointInternal(float x, float y,

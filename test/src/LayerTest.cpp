@@ -42,11 +42,19 @@
 #include "tgfx/layers/ShapeLayer.h"
 #include "tgfx/layers/SolidLayer.h"
 #include "tgfx/layers/TextLayer.h"
+#include "tgfx/layers/VectorLayer.h"
 #include "tgfx/layers/filters/BlurFilter.h"
 #include "tgfx/layers/filters/DropShadowFilter.h"
 #include "tgfx/layers/layerstyles/BackgroundBlurStyle.h"
 #include "tgfx/layers/layerstyles/DropShadowStyle.h"
 #include "tgfx/layers/layerstyles/InnerShadowStyle.h"
+#include "tgfx/layers/vectors/Ellipse.h"
+#include "tgfx/layers/vectors/FillStyle.h"
+#include "tgfx/layers/vectors/ImagePattern.h"
+#include "tgfx/layers/vectors/Rectangle.h"
+#include "tgfx/layers/vectors/SolidColor.h"
+#include "tgfx/layers/vectors/StrokeStyle.h"
+#include "tgfx/layers/vectors/VectorGroup.h"
 #include "utils/TestUtils.h"
 
 namespace tgfx {
@@ -3334,7 +3342,7 @@ TGFX_TEST(LayerTest, BackgroundBlurWithFilter) {
   ContextScope scope;
   auto context = scope.getContext();
   ASSERT_TRUE(context != nullptr);
-  auto surface = Surface::Make(context, 300, 300);
+  auto surface = Surface::Make(context, 500, 300);
   auto solidLayer = tgfx::SolidLayer::Make();
   solidLayer->setWidth(302);
   solidLayer->setHeight(227);
@@ -3363,6 +3371,396 @@ TGFX_TEST(LayerTest, BackgroundBlurWithFilter) {
   displayList.setRenderMode(RenderMode::Partial);
   displayList.render(surface.get());
   EXPECT_TRUE(Baseline::Compare(surface, "LayerTest/BackgroundBlurWithFilter_Partial"));
+}
+
+static const Color YELLOW_COLOR = {1.0f, 1.0f, 0.0f, 1.0f};
+
+static inline std::shared_ptr<DropShadowStyle> MakeDropShadow(float offsetX, float offsetY,
+                                                              float blurX, float blurY,
+                                                              const Color& color, float spread) {
+  auto style = DropShadowStyle::Make(offsetX, offsetY, blurX, blurY, color);
+  style->setSpread(spread);
+  return style;
+}
+
+static inline std::shared_ptr<InnerShadowStyle> MakeInnerShadow(float offsetX, float offsetY,
+                                                                float blurX, float blurY,
+                                                                const Color& color, float spread) {
+  auto style = InnerShadowStyle::Make(offsetX, offsetY, blurX, blurY, color);
+  style->setSpread(spread);
+  return style;
+}
+
+TGFX_TEST(LayerTest, DropShadow) {
+  ContextScope scope;
+  auto context = scope.getContext();
+  ASSERT_TRUE(context != nullptr);
+  constexpr float cellW = 800.0f;
+  constexpr float cellH = 240.0f;
+  constexpr float elementTopMargin = 50.0f;
+  constexpr float elementLeftX = 90.0f;
+  constexpr float elementRightX = 445.0f;
+  auto surface = Surface::Make(context, static_cast<int>(cellW * 2),
+                               static_cast<int>(cellH * 5 + elementTopMargin));
+  auto displayList = std::make_unique<DisplayList>();
+  auto image = MakeImage("resources/apitest/test_timestretch.png")->makeScaled(200, 120);
+
+  // Case 1: SolidLayer with roundness 20, spread=15
+  for (int i = 0; i < 2; ++i) {
+    auto layer = SolidLayer::Make();
+    layer->setColor(Color::Red());
+    layer->setWidth(200);
+    layer->setHeight(120);
+    layer->setRadiusX(20);
+    layer->setRadiusY(20);
+    layer->setMatrix(Matrix::MakeTrans(i == 0 ? elementLeftX : elementRightX, elementTopMargin));
+    layer->setLayerStyles({MakeDropShadow(50, 50, 5, 5, YELLOW_COLOR, i == 0 ? 0.0f : 15.0f)});
+    displayList->root()->addChild(layer);
+  }
+
+  // Case 2: ImageLayer, spread=15
+  for (int i = 0; i < 2; ++i) {
+    auto layer = ImageLayer::Make();
+    layer->setImage(image);
+    layer->setMatrix(
+        Matrix::MakeTrans(cellW + (i == 0 ? elementLeftX : elementRightX), elementTopMargin));
+    layer->setLayerStyles({MakeDropShadow(50, 50, 5, 5, YELLOW_COLOR, i == 0 ? 0.0f : 15.0f)});
+    displayList->root()->addChild(layer);
+  }
+
+  // Case 3: ShapeLayer Oval fill, spread=15
+  for (int i = 0; i < 2; ++i) {
+    auto layer = ShapeLayer::Make();
+    Path path = {};
+    path.addOval(Rect::MakeXYWH(0.0f, 0.0f, 200.0f, 120.0f));
+    layer->setPath(path);
+    layer->setFillStyle(ShapeStyle::Make(Color::Red()));
+    layer->setMatrix(
+        Matrix::MakeTrans(i == 0 ? elementLeftX : elementRightX, cellH + elementTopMargin));
+    layer->setLayerStyles({MakeDropShadow(50, 50, 5, 5, YELLOW_COLOR, i == 0 ? 0.0f : 15.0f)});
+    displayList->root()->addChild(layer);
+  }
+
+  // Case 4: ShapeLayer Oval stroke, spread=15
+  for (int i = 0; i < 2; ++i) {
+    auto layer = ShapeLayer::Make();
+    Path path = {};
+    path.addOval(Rect::MakeXYWH(0.0f, 0.0f, 200.0f, 120.0f));
+    layer->setPath(path);
+    layer->setStrokeStyle(ShapeStyle::Make(Color::Blue()));
+    layer->setLineWidth(30);
+    layer->setMatrix(Matrix::MakeTrans(cellW + (i == 0 ? elementLeftX : elementRightX),
+                                       cellH + elementTopMargin));
+    layer->setLayerStyles({MakeDropShadow(50, 50, 5, 5, Color::Green(), i == 0 ? 0.0f : 15.0f)});
+    displayList->root()->addChild(layer);
+  }
+
+  // Case 5: ShapeLayer Rect + ImageShader fill, spread=15
+  for (int i = 0; i < 2; ++i) {
+    auto layer = ShapeLayer::Make();
+    Path path = {};
+    path.addRect(Rect::MakeXYWH(0.0f, 0.0f, 200.0f, 120.0f));
+    layer->setPath(path);
+    auto shader = Shader::MakeImageShader(image, TileMode::Clamp, TileMode::Clamp);
+    layer->setFillStyle(ShapeStyle::Make(shader));
+    layer->setMatrix(
+        Matrix::MakeTrans(i == 0 ? elementLeftX : elementRightX, cellH * 2 + elementTopMargin));
+    layer->setLayerStyles({MakeDropShadow(50, 50, 5, 5, YELLOW_COLOR, i == 0 ? 0.0f : 15.0f)});
+    displayList->root()->addChild(layer);
+  }
+
+  // Case 6: TextLayer, spread=15
+  {
+    auto typeface = MakeTypeface("resources/font/NotoSansSC-Regular.otf");
+    for (int i = 0; i < 2; ++i) {
+      auto font = Font(typeface, 80);
+      font.setFauxBold(true);
+      auto layer = TextLayer::Make();
+      layer->setText("TGFX");
+      layer->setFont(font);
+      layer->setTextColor(Color::Red());
+      layer->setMatrix(Matrix::MakeTrans(cellW + (i == 0 ? elementLeftX : elementRightX),
+                                         cellH * 2 + elementTopMargin));
+      layer->setLayerStyles({MakeDropShadow(50, 50, 5, 5, YELLOW_COLOR, i == 0 ? 0.0f : 15.0f)});
+      displayList->root()->addChild(layer);
+    }
+  }
+
+  // Case 7: VectorLayer RoundRect + ImagePattern fill, spread=-15
+  for (int i = 0; i < 2; ++i) {
+    auto vectorLayer = VectorLayer::Make();
+    auto group = VectorGroup::Make();
+    auto rect = Rectangle::Make();
+    rect->setSize({200, 120});
+    rect->setPosition({100, 60});
+    rect->setRoundness({20, 20, 20, 20});
+    auto pattern = ImagePattern::Make(image);
+    pattern->setScaleMode(ScaleMode::Zoom);
+    auto fill = FillStyle::Make(pattern);
+    group->setElements({rect, fill});
+    vectorLayer->setContents({group});
+    vectorLayer->setMatrix(
+        Matrix::MakeTrans(i == 0 ? elementLeftX : elementRightX, cellH * 3 + elementTopMargin));
+    vectorLayer->setLayerStyles(
+        {MakeDropShadow(50, 50, 5, 5, YELLOW_COLOR, i == 0 ? 0.0f : -15.0f)});
+    displayList->root()->addChild(vectorLayer);
+  }
+
+  // Case 8: VectorLayer Ellipse + Center stroke 30px, spread=-10
+  for (int i = 0; i < 2; ++i) {
+    auto vectorLayer = VectorLayer::Make();
+    auto group = VectorGroup::Make();
+    auto ellipse = Ellipse::Make();
+    ellipse->setPosition({100, 60});
+    ellipse->setSize({200, 120});
+    auto stroke = StrokeStyle::Make(SolidColor::Make(Color::Blue()));
+    stroke->setStrokeWidth(30);
+    group->setElements({ellipse, stroke});
+    vectorLayer->setContents({group});
+    vectorLayer->setMatrix(Matrix::MakeTrans(cellW + (i == 0 ? elementLeftX : elementRightX),
+                                             cellH * 3 + elementTopMargin));
+    vectorLayer->setLayerStyles(
+        {MakeDropShadow(50, 50, 5, 5, Color::Green(), i == 0 ? 0.0f : -10.0f)});
+    displayList->root()->addChild(vectorLayer);
+  }
+
+  // Case 9: VectorLayer Rect+Ellipse + Inside stroke 30px, spread=10
+  for (int i = 0; i < 2; ++i) {
+    auto vectorLayer = VectorLayer::Make();
+    auto group = VectorGroup::Make();
+    auto rect = Rectangle::Make();
+    rect->setPosition({50, 60});
+    rect->setSize({100, 120});
+    auto ellipse = Ellipse::Make();
+    ellipse->setPosition({150, 60});
+    ellipse->setSize({100, 120});
+    auto stroke = StrokeStyle::Make(SolidColor::Make(Color::Blue()));
+    stroke->setStrokeWidth(15);
+    stroke->setStrokeAlign(StrokeAlign::Inside);
+    group->setElements({rect, ellipse, stroke});
+    vectorLayer->setContents({group});
+    vectorLayer->setMatrix(
+        Matrix::MakeTrans(i == 0 ? elementLeftX : elementRightX, cellH * 4 + elementTopMargin));
+    vectorLayer->setLayerStyles(
+        {MakeDropShadow(50, 50, 5, 5, Color::Green(), i == 0 ? 0.0f : 10.0f)});
+    displayList->root()->addChild(vectorLayer);
+  }
+
+  // Case 10: VectorLayer Ellipse + Outside dashed stroke 30px + SolidLayer child, spread=15
+  for (int i = 0; i < 2; ++i) {
+    auto vectorLayer = VectorLayer::Make();
+    auto group = VectorGroup::Make();
+    auto ellipse = Ellipse::Make();
+    ellipse->setPosition({100, 60});
+    ellipse->setSize({200, 120});
+    auto stroke = StrokeStyle::Make(SolidColor::Make(Color::Blue()));
+    stroke->setStrokeWidth(15);
+    stroke->setStrokeAlign(StrokeAlign::Outside);
+    stroke->setLineCap(LineCap::Round);
+    stroke->setDashes({20, 50});
+    group->setElements({ellipse, stroke});
+    vectorLayer->setContents({group});
+    vectorLayer->setMatrix(Matrix::MakeTrans(cellW + (i == 0 ? elementLeftX : elementRightX),
+                                             cellH * 4 + elementTopMargin));
+    auto child = SolidLayer::Make();
+    child->setWidth(60);
+    child->setHeight(40);
+    child->setColor(Color::Red());
+    child->setMatrix(Matrix::MakeTrans(70, 40));
+    vectorLayer->addChild(child);
+    vectorLayer->setLayerStyles(
+        {MakeDropShadow(50, 50, 5, 5, Color::Green(), i == 0 ? 0.0f : 15.0f)});
+    displayList->root()->addChild(vectorLayer);
+  }
+
+  displayList->render(surface.get());
+  EXPECT_TRUE(Baseline::Compare(surface, "LayerTest/DropShadow"));
+}
+
+TGFX_TEST(LayerTest, InnerShadow) {
+  ContextScope scope;
+  auto context = scope.getContext();
+  ASSERT_TRUE(context != nullptr);
+  constexpr float cellW = 800.0f;
+  constexpr float cellH = 240.0f;
+  constexpr float elementTopMargin = 50.0f;
+  constexpr float elementLeftX = 90.0f;
+  constexpr float elementRightX = 445.0f;
+  auto surface = Surface::Make(context, static_cast<int>(cellW * 2),
+                               static_cast<int>(cellH * 5 + elementTopMargin));
+  auto displayList = std::make_unique<DisplayList>();
+  auto image = MakeImage("resources/apitest/test_timestretch.png")->makeScaled(200, 120);
+
+  // Case 1: SolidLayer with roundness 20, spread=15
+  for (int i = 0; i < 2; ++i) {
+    auto layer = SolidLayer::Make();
+    layer->setColor(Color::Red());
+    layer->setWidth(200);
+    layer->setHeight(120);
+    layer->setRadiusX(20);
+    layer->setRadiusY(20);
+    layer->setMatrix(Matrix::MakeTrans(i == 0 ? elementLeftX : elementRightX, elementTopMargin));
+    layer->setLayerStyles({MakeInnerShadow(50, 50, 5, 5, YELLOW_COLOR, i == 0 ? 0.0f : 15.0f)});
+    displayList->root()->addChild(layer);
+  }
+
+  // Case 2: ImageLayer, spread=15
+  for (int i = 0; i < 2; ++i) {
+    auto layer = ImageLayer::Make();
+    layer->setImage(image);
+    layer->setMatrix(
+        Matrix::MakeTrans(cellW + (i == 0 ? elementLeftX : elementRightX), elementTopMargin));
+    layer->setLayerStyles({MakeInnerShadow(50, 50, 5, 5, YELLOW_COLOR, i == 0 ? 0.0f : 15.0f)});
+    displayList->root()->addChild(layer);
+  }
+
+  // Case 3: ShapeLayer Oval fill, spread=15
+  for (int i = 0; i < 2; ++i) {
+    auto layer = ShapeLayer::Make();
+    Path path = {};
+    path.addOval(Rect::MakeXYWH(0.0f, 0.0f, 200.0f, 120.0f));
+    layer->setPath(path);
+    layer->setFillStyle(ShapeStyle::Make(Color::Red()));
+    layer->setMatrix(
+        Matrix::MakeTrans(i == 0 ? elementLeftX : elementRightX, cellH + elementTopMargin));
+    layer->setLayerStyles({MakeInnerShadow(50, 50, 5, 5, YELLOW_COLOR, i == 0 ? 0.0f : 15.0f)});
+    displayList->root()->addChild(layer);
+  }
+
+  // Case 4: ShapeLayer Oval stroke, spread=15
+  for (int i = 0; i < 2; ++i) {
+    auto layer = ShapeLayer::Make();
+    Path path = {};
+    path.addOval(Rect::MakeXYWH(0.0f, 0.0f, 200.0f, 120.0f));
+    layer->setPath(path);
+    layer->setStrokeStyle(ShapeStyle::Make(Color::Blue()));
+    layer->setLineWidth(30);
+    layer->setMatrix(Matrix::MakeTrans(cellW + (i == 0 ? elementLeftX : elementRightX),
+                                       cellH + elementTopMargin));
+    layer->setLayerStyles({MakeInnerShadow(50, 50, 5, 5, Color::Green(), i == 0 ? 0.0f : 15.0f)});
+    displayList->root()->addChild(layer);
+  }
+
+  // Case 5: ShapeLayer Rect + ImageShader fill, spread=15
+  for (int i = 0; i < 2; ++i) {
+    auto layer = ShapeLayer::Make();
+    Path path = {};
+    path.addRect(Rect::MakeXYWH(0.0f, 0.0f, 200.0f, 120.0f));
+    layer->setPath(path);
+    auto shader = Shader::MakeImageShader(image, TileMode::Clamp, TileMode::Clamp);
+    layer->setFillStyle(ShapeStyle::Make(shader));
+    layer->setMatrix(
+        Matrix::MakeTrans(i == 0 ? elementLeftX : elementRightX, cellH * 2 + elementTopMargin));
+    layer->setLayerStyles({MakeInnerShadow(50, 50, 5, 5, YELLOW_COLOR, i == 0 ? 0.0f : 15.0f)});
+    displayList->root()->addChild(layer);
+  }
+
+  // Case 6: TextLayer, spread=15
+  {
+    auto typeface = MakeTypeface("resources/font/NotoSansSC-Regular.otf");
+    for (int i = 0; i < 2; ++i) {
+      auto font = Font(typeface, 80);
+      font.setFauxBold(true);
+      auto layer = TextLayer::Make();
+      layer->setText("TGFX");
+      layer->setFont(font);
+      layer->setTextColor(Color::Red());
+      layer->setMatrix(Matrix::MakeTrans(cellW + (i == 0 ? elementLeftX : elementRightX),
+                                         cellH * 2 + elementTopMargin));
+      layer->setLayerStyles({MakeInnerShadow(50, 50, 5, 5, YELLOW_COLOR, i == 0 ? 0.0f : 15.0f)});
+      displayList->root()->addChild(layer);
+    }
+  }
+
+  // Case 7: VectorLayer RoundRect + ImagePattern fill, spread=-15
+  for (int i = 0; i < 2; ++i) {
+    auto vectorLayer = VectorLayer::Make();
+    auto group = VectorGroup::Make();
+    auto rect = Rectangle::Make();
+    rect->setSize({200, 120});
+    rect->setPosition({100, 60});
+    rect->setRoundness({20, 20, 20, 20});
+    auto pattern = ImagePattern::Make(image);
+    pattern->setScaleMode(ScaleMode::Zoom);
+    auto fill = FillStyle::Make(pattern);
+    group->setElements({rect, fill});
+    vectorLayer->setContents({group});
+    vectorLayer->setMatrix(
+        Matrix::MakeTrans(i == 0 ? elementLeftX : elementRightX, cellH * 3 + elementTopMargin));
+    vectorLayer->setLayerStyles(
+        {MakeInnerShadow(50, 50, 5, 5, YELLOW_COLOR, i == 0 ? 0.0f : -15.0f)});
+    displayList->root()->addChild(vectorLayer);
+  }
+
+  // Case 8: VectorLayer Ellipse + Center stroke 30px, spread=-10
+  for (int i = 0; i < 2; ++i) {
+    auto vectorLayer = VectorLayer::Make();
+    auto group = VectorGroup::Make();
+    auto ellipse = Ellipse::Make();
+    ellipse->setPosition({100, 60});
+    ellipse->setSize({200, 120});
+    auto stroke = StrokeStyle::Make(SolidColor::Make(Color::Blue()));
+    stroke->setStrokeWidth(30);
+    group->setElements({ellipse, stroke});
+    vectorLayer->setContents({group});
+    vectorLayer->setMatrix(Matrix::MakeTrans(cellW + (i == 0 ? elementLeftX : elementRightX),
+                                             cellH * 3 + elementTopMargin));
+    vectorLayer->setLayerStyles(
+        {MakeInnerShadow(50, 50, 5, 5, Color::Green(), i == 0 ? 0.0f : -10.0f)});
+    displayList->root()->addChild(vectorLayer);
+  }
+
+  // Case 9: VectorLayer Rect+Ellipse + Inside stroke 30px, spread=10
+  for (int i = 0; i < 2; ++i) {
+    auto vectorLayer = VectorLayer::Make();
+    auto group = VectorGroup::Make();
+    auto rect = Rectangle::Make();
+    rect->setPosition({50, 60});
+    rect->setSize({100, 120});
+    auto ellipse = Ellipse::Make();
+    ellipse->setPosition({150, 60});
+    ellipse->setSize({100, 120});
+    auto stroke = StrokeStyle::Make(SolidColor::Make(Color::Blue()));
+    stroke->setStrokeWidth(15);
+    stroke->setStrokeAlign(StrokeAlign::Inside);
+    group->setElements({rect, ellipse, stroke});
+    vectorLayer->setContents({group});
+    vectorLayer->setMatrix(
+        Matrix::MakeTrans(i == 0 ? elementLeftX : elementRightX, cellH * 4 + elementTopMargin));
+    vectorLayer->setLayerStyles(
+        {MakeInnerShadow(50, 50, 5, 5, Color::Green(), i == 0 ? 0.0f : 10.0f)});
+    displayList->root()->addChild(vectorLayer);
+  }
+
+  // Case 10: VectorLayer Ellipse + Outside dashed stroke 30px + SolidLayer child, spread=15
+  for (int i = 0; i < 2; ++i) {
+    auto vectorLayer = VectorLayer::Make();
+    auto group = VectorGroup::Make();
+    auto ellipse = Ellipse::Make();
+    ellipse->setPosition({100, 60});
+    ellipse->setSize({200, 120});
+    auto stroke = StrokeStyle::Make(SolidColor::Make(Color::Blue()));
+    stroke->setStrokeWidth(15);
+    stroke->setStrokeAlign(StrokeAlign::Outside);
+    stroke->setLineCap(LineCap::Round);
+    stroke->setDashes({20, 50});
+    group->setElements({ellipse, stroke});
+    vectorLayer->setContents({group});
+    vectorLayer->setMatrix(Matrix::MakeTrans(cellW + (i == 0 ? elementLeftX : elementRightX),
+                                             cellH * 4 + elementTopMargin));
+    auto child = SolidLayer::Make();
+    child->setWidth(60);
+    child->setHeight(40);
+    child->setColor(Color::Red());
+    child->setMatrix(Matrix::MakeTrans(70, 40));
+    vectorLayer->addChild(child);
+    vectorLayer->setLayerStyles(
+        {MakeInnerShadow(50, 50, 5, 5, Color::Green(), i == 0 ? 0.0f : 15.0f)});
+    displayList->root()->addChild(vectorLayer);
+  }
+
+  displayList->render(surface.get());
+  EXPECT_TRUE(Baseline::Compare(surface, "LayerTest/InnerShadow"));
 }
 
 }  // namespace tgfx

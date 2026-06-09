@@ -23,6 +23,7 @@
 #include "tgfx/core/BlendMode.h"
 #include "tgfx/core/Shader.h"
 #include "tgfx/layers/LayerPaint.h"
+#include "tgfx/layers/layerstyles/StyledShape.h"
 #include "tgfx/layers/vectors/ColorSource.h"
 
 namespace tgfx {
@@ -65,6 +66,13 @@ class Painter {
    * Creates a copy of this painter.
    */
   virtual std::unique_ptr<Painter> clone() const = 0;
+
+  /**
+   * Returns a StyledShape that describes the combined geometry of all captured elements with the
+   * painter's own style (fill/stroke) applied. The base class merges all geometry shapes into one,
+   * then delegates to onGetStyledShape for subclass-specific style fields.
+   */
+  StyledShape getStyledShape() const;
 
   std::shared_ptr<Shader> shader = nullptr;
   std::shared_ptr<ColorSource> colorSource = nullptr;
@@ -116,6 +124,12 @@ class Painter {
    * Builds a base LayerPaint pre-populated with the painter's blendMode/alpha/placement.
    */
   LayerPaint makeBasePaint() const;
+
+  /**
+   * Subclass hook: fill in style-specific fields (style, strokeWidth, strokeAlign) on the result.
+   * The shape field is already populated by the base class getStyledShape().
+   */
+  virtual void onGetStyledShape(StyledShape& result) const = 0;
 
  private:
   /**

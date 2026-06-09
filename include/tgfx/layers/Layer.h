@@ -29,6 +29,7 @@
 #include "tgfx/layers/LayerType.h"
 #include "tgfx/layers/filters/LayerFilter.h"
 #include "tgfx/layers/layerstyles/LayerStyle.h"
+#include "tgfx/layers/layerstyles/StyledShape.h"
 
 namespace tgfx {
 class LayerContent;
@@ -588,6 +589,13 @@ class Layer : public std::enable_shared_from_this<Layer> {
    * Detaches a property from this layer.
    */
   void detachProperty(LayerProperty* property);
+
+  /**
+   * Returns the content shape of this layer.
+   * The base class generates a shape from the content's bounding rect. Subclasses can override
+   * this to provide a more precise shape.
+   */
+  virtual std::optional<StyledShape> onGetContentShape();
 
  private:
   /**

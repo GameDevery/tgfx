@@ -2,7 +2,7 @@
 //
 //  Tencent is pleased to support the open source community by making tgfx available.
 //
-//  Copyright (C) 2024 Tencent. All rights reserved.
+//  Copyright (C) 2026 Tencent. All rights reserved.
 //
 //  Licensed under the BSD 3-Clause License (the "License"); you may not use this file except
 //  in compliance with the License. You may obtain a copy of the License at
@@ -16,27 +16,39 @@
 //
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
-#include "tgfx/layers/layerstyles/LayerStyle.h"
+#pragma once
+
+#include <memory>
+#include "tgfx/core/Paint.h"
+#include "tgfx/core/Shape.h"
+#include "tgfx/layers/StrokeAlign.h"
 
 namespace tgfx {
-void LayerStyle::setBlendMode(BlendMode blendMode) {
-  if (_blendMode == blendMode) {
-    return;
-  }
-  _blendMode = blendMode;
-  invalidateTransform();
-}
 
-Rect LayerStyle::filterBackground(const Rect& srcRect, float) {
-  return srcRect;
-}
+/**
+ * StyledShape describes a vector shape along with its style attributes (e.g. fill or stroke, stroke
+ * width).
+ */
+struct StyledShape {
+  /**
+   * The original vector shape.
+   */
+  std::shared_ptr<Shape> shape = nullptr;
 
-void LayerStyle::setExcludeChildEffects(bool value) {
-  if (_excludeChildEffects == value) {
-    return;
-  }
-  _excludeChildEffects = value;
-  invalidateTransform();
-}
+  /**
+   * Whether the shape represents a fill or a stroke.
+   */
+  PaintStyle style = PaintStyle::Fill;
+
+  /**
+   * The stroke width. Ignored when style is Fill.
+   */
+  float strokeWidth = 0.0f;
+
+  /**
+   * The stroke alignment. Ignored when style is Fill.
+   */
+  StrokeAlign strokeAlign = StrokeAlign::Center;
+};
 
 }  // namespace tgfx

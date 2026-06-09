@@ -105,4 +105,29 @@ Matrix Painter::computeOuterMatrix(size_t index) const {
   return outer;
 }
 
+StyledShape Painter::getStyledShape() const {
+  StyledShape result = {};
+  if (geometries.size() == 1) {
+    auto shape = geometries[0]->getShape();
+    if (shape && !innerMatrices[0].isIdentity()) {
+      shape = Shape::ApplyMatrix(shape, innerMatrices[0]);
+    }
+    result.shape = shape;
+  } else {
+    Path merged = {};
+    for (size_t i = 0; i < geometries.size(); ++i) {
+      auto shape = geometries[i]->getShape();
+      if (shape == nullptr) {
+        continue;
+      }
+      auto path = shape->getPath();
+      path.transform(innerMatrices[i]);
+      merged.addPath(path);
+    }
+    result.shape = Shape::MakeFrom(merged);
+  }
+  onGetStyledShape(result);
+  return result;
+}
+
 }  // namespace tgfx
